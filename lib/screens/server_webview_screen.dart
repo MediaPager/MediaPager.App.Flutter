@@ -1,7 +1,10 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_all/webview_all.dart';
+import 'package:webview_all_android/webview_all_android.dart';
+import 'package:webview_all_wkwebview/webview_all_wkwebview.dart';
 
 import '../models/server_connection.dart';
 import '../services/server_store.dart';
@@ -26,6 +29,10 @@ class _ServerWebViewScreenState extends State<ServerWebViewScreen> {
   bool _connecting = true;
   int _progress = 0;
 
+  bool get _isMobilePlatform =>
+      defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.android;
+
   @override
   void initState() {
     super.initState();
@@ -43,8 +50,37 @@ class _ServerWebViewScreenState extends State<ServerWebViewScreen> {
     try {
       final session = await widget.store.refreshMobileSession(widget.server);
 
-      final controller = WebViewController();
+      final PlatformWebViewControllerCreationParams creationParams =
+          WebViewPlatform.instance is WebKitWebViewPlatform
+          ? WebKitWebViewControllerCreationParams(
+              mediaTypesRequiringUserAction: const <PlaybackMediaTypes>{},
+              allowsInlineMediaPlayback: true,
+            )
+          : const PlatformWebViewControllerCreationParams();
+      final controller = WebViewController.fromPlatformCreationParams(
+        creationParams,
+      );
+      if (controller.platform is AndroidWebViewController) {
+        await (controller.platform as AndroidWebViewController)
+            .setMediaPlaybackRequiresUserGesture(false);
+      }
       await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
+      if (_isMobilePlatform) {
+        await controller.addJavaScriptChannel(
+          'MediaPagerApp',
+          onMessageReceived: (message) {
+            if (!mounted) return;
+            switch (message.message) {
+              case 'refresh':
+                controller.reload();
+                break;
+              case 'backToServers':
+                Navigator.of(context).pop();
+                break;
+            }
+          },
+        );
+      }
       await controller.setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (_) {
@@ -116,25 +152,27 @@ try {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          tooltip: 'Back to servers',
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text(
-          widget.server.nickname,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Reload server',
-            onPressed: _controller?.reload,
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
-      ),
+      appBar: _isMobilePlatform
+          ? null
+          : AppBar(
+              leading: IconButton(
+                tooltip: 'Back to servers',
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+              title: Text(
+                widget.server.nickname,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              actions: [
+                IconButton(
+                  tooltip: 'Reload server',
+                  onPressed: _controller?.reload,
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
+            ),
       body: Stack(
         children: [
           if (_controller != null) WebViewWidget(controller: _controller!),

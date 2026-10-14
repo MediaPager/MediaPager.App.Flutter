@@ -252,19 +252,21 @@ class ServerStore extends ChangeNotifier {
 
   Future<String> _apiBaseUrl(String serverUrl) async {
     final site = Uri.parse(serverUrl);
-    try {
-      final response = await http
-          .get(site.resolve('/runtime-config.json'))
-          .timeout(const Duration(seconds: 8));
-      if (response.statusCode == 200) {
-        final config = jsonDecode(response.body) as Map<String, dynamic>;
-        final configured = config['apiBaseUrl'] as String?;
-        if (configured != null && configured.trim().isNotEmpty) {
-          return site.resolve(configured.trim()).toString();
+    for (final path in const ['/info/apiurl', '/runtime-config.json']) {
+      try {
+        final response = await http
+            .get(site.resolve(path))
+            .timeout(const Duration(seconds: 4));
+        if (response.statusCode == 200) {
+          final configured = resolveApiBaseUrlResponse(
+            serverUrl,
+            response.body,
+          );
+          if (configured != null) return configured;
         }
+      } catch (_) {
+        // Try the legacy runtime-config endpoint, then same-origin fallback.
       }
-    } catch (_) {
-      // Most single-origin installs don't publish runtime-config.json.
     }
     return serverUrl;
   }
@@ -309,6 +311,41 @@ class MobileSessionException implements Exception {
 
   @override
   String toString() => message;
+}
+
+String? resolveApiBaseUrlResponse(String serverUrl, String responseBody) {
+  final site = Uri.tryParse(serverUrl);
+  if (site == null) return null;
+
+  dynamic payload;
+  try {
+    payload = jsonDecode(responseBody);
+  } catch (_) {
+    payload = responseBody.trim();
+  }
+  final value = payload is Map<String, dynamic>
+      ? payload['apiBaseUrl']?.toString().trim()
+      : payload is String
+      ? payload.trim()
+      : null;
+  if (value == null || value.isEmpty) return null;
+
+  final candidate = Uri.tryParse(value);
+  if (candidate == null) return null;
+  final apiBase = candidate.hasScheme
+      ? candidate
+      : value.startsWith('/')
+      ? site.resolve(value)
+      : null;
+  if (apiBase == null ||
+      !apiBase.hasAuthority ||
+      !const {'http', 'https'}.contains(apiBase.scheme.toLowerCase())) {
+    return null;
+  }
+  return apiBase
+      .replace(query: null, fragment: null)
+      .toString()
+      .replaceFirst(RegExp(r'/$'), '');
 }
 
 String normalizeServerUrl(String raw) {

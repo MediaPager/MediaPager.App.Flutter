@@ -3,6 +3,48 @@ import 'package:mediapager_app_flutter/models/server_connection.dart';
 import 'package:mediapager_app_flutter/services/server_store.dart';
 
 void main() {
+  group('resolveApiBaseUrlResponse', () {
+    test('uses the API URL advertised by the SPA', () {
+      expect(
+        resolveApiBaseUrlResponse(
+          'https://frontend.example.com',
+          '{"apiBaseUrl":"https://api.custom.example"}',
+        ),
+        'https://api.custom.example',
+      );
+    });
+
+    test('resolves a relative API URL against the SPA origin', () {
+      expect(
+        resolveApiBaseUrlResponse(
+          'https://media.example.com',
+          '{"apiBaseUrl":"/"}',
+        ),
+        'https://media.example.com',
+      );
+    });
+
+    test('accepts a plain-text API URL from the discovery route', () {
+      expect(
+        resolveApiBaseUrlResponse(
+          'https://frontend.example.com',
+          'https://api.custom.example',
+        ),
+        'https://api.custom.example',
+      );
+    });
+
+    test('ignores an HTML SPA fallback response', () {
+      expect(
+        resolveApiBaseUrlResponse(
+          'https://media.example.com',
+          '<!doctype html><html><body>SPA</body></html>',
+        ),
+        isNull,
+      );
+    });
+  });
+
   group('normalizeServerUrl', () {
     test('trims whitespace and trailing slash', () {
       expect(
