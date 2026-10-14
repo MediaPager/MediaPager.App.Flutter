@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=MediaPager
+Comment=Connect to your self-hosted MediaPager servers
+Exec=mediapager_app_flutter
+Icon=${SNAP}/meta/gui/mediapager_app_flutter.png
+Terminal=false
+Type=Application
+Categories=AudioVideo;Player;

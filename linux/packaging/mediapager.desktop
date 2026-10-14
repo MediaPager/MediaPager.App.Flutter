@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=MediaPager
+Comment=Browse and play media from your MediaPager servers
+Exec=mediapager_app_flutter
+Icon=mediapager_app_flutter
+Terminal=false
+Type=Application
+Categories=AudioVideo;Player;

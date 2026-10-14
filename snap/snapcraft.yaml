@@ -1,0 +1,29 @@
+name: mediapager-client
+version: 1.0.0
+summary: Connect to your MediaPager servers
+description: Browse and play media from self-hosted MediaPager libraries.
+
+confinement: strict
+base: core22
+grade: stable
+
+slots:
+  dbus-mediapager-client:
+    interface: dbus
+    bus: session
+    name: com.mediapager.mediapager
+
+apps:
+  mediapager-client:
+    command: mediapager_app_flutter
+    desktop: snap/gui/mediapager_app_flutter.desktop
+    extensions: [gnome] # gnome includes the libraries required by flutter
+    plugs:
+    - network
+    slots:
+      - dbus-mediapager-client
+parts:
+  mediapager-client:
+    source: .
+    plugin: flutter
+    flutter-target: lib/main.dart # The main entry-point file of the application
