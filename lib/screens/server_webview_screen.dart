@@ -218,10 +218,23 @@ try {
                           const SizedBox(height: 16),
                           Text(_error!, textAlign: TextAlign.center),
                           const SizedBox(height: 20),
-                          FilledButton.icon(
-                            onPressed: _connect,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Try again'),
+                          Wrap(
+                            alignment: WrapAlignment.center,
+                            spacing: 12,
+                            runSpacing: 8,
+                            children: [
+                              FilledButton.icon(
+                                onPressed: _connect,
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Try again'),
+                              ),
+                              if (_isMobilePlatform)
+                                OutlinedButton.icon(
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  icon: const Icon(Icons.arrow_back),
+                                  label: const Text('Back to server list'),
+                                ),
+                            ],
                           ),
                         ],
                       ),
