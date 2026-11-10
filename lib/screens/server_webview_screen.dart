@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:webview_all/webview_all.dart';
 import 'package:webview_all_android/webview_all_android.dart';
 import 'package:webview_all_wkwebview/webview_all_wkwebview.dart';
@@ -24,19 +26,65 @@ class ServerWebViewScreen extends StatefulWidget {
 }
 
 class _ServerWebViewScreenState extends State<ServerWebViewScreen> {
+  static const _windowChannel = MethodChannel('mediapager/window');
+
   WebViewController? _controller;
   String? _error;
   bool _connecting = true;
   int _progress = 0;
+  bool _isFullscreen = false;
 
   bool get _isMobilePlatform =>
       defaultTargetPlatform == TargetPlatform.iOS ||
       defaultTargetPlatform == TargetPlatform.android;
+  bool get _isMacOSPlatform => defaultTargetPlatform == TargetPlatform.macOS;
+  bool get _isDesktopPlatform =>
+      _isMacOSPlatform ||
+      defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.linux;
 
   @override
   void initState() {
     super.initState();
+    if (_isMacOSPlatform) {
+      _windowChannel.setMethodCallHandler(_handleWindowMethodCall);
+    }
     _connect();
+  }
+
+  @override
+  void dispose() {
+    if (_isMacOSPlatform) {
+      _windowChannel.setMethodCallHandler(null);
+    }
+    super.dispose();
+  }
+
+  Future<dynamic> _handleWindowMethodCall(MethodCall call) async {
+    if (call.method != 'fullscreenChanged') return null;
+
+    final fullscreen = call.arguments == true;
+    _setFullscreenState(fullscreen);
+    final fullscreenValue = fullscreen ? 'true' : 'false';
+    await _controller?.runJavaScript('''
+      window.dispatchEvent(new CustomEvent(
+        'mediapager:window-fullscreen-changed',
+        { detail: { fullscreen: $fullscreenValue } }
+      ));
+    ''');
+    return null;
+  }
+
+  void _setFullscreenState(bool fullscreen) {
+    if (!mounted || _isFullscreen == fullscreen) return;
+    setState(() => _isFullscreen = fullscreen);
+  }
+
+  Future<void> _setWindowFullscreen(bool fullscreen) async {
+    if (!_isMacOSPlatform) return;
+    await _windowChannel.invokeMethod<void>('setFullscreen', {
+      'enabled': fullscreen,
+    });
   }
 
   Future<void> _connect() async {
@@ -65,7 +113,7 @@ class _ServerWebViewScreenState extends State<ServerWebViewScreen> {
             .setMediaPlaybackRequiresUserGesture(false);
       }
       await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
-      if (_isMobilePlatform) {
+      if (_isMobilePlatform || _isMacOSPlatform) {
         await controller.addJavaScriptChannel(
           'MediaPagerApp',
           onMessageReceived: (message) {
@@ -77,6 +125,27 @@ class _ServerWebViewScreenState extends State<ServerWebViewScreen> {
               case 'backToServers':
                 Navigator.of(context).pop();
                 break;
+            }
+          },
+        );
+      }
+      if (_isDesktopPlatform) {
+        await controller.addJavaScriptChannel(
+          'MediaPagerFullscreen',
+          onMessageReceived: (message) {
+            _setFullscreenState(message.message == 'true');
+          },
+        );
+      }
+      if (_isMacOSPlatform) {
+        await controller.addJavaScriptChannel(
+          'MediaPagerWindow',
+          onMessageReceived: (message) {
+            if (!mounted) return;
+            if (message.message == 'fullscreen') {
+              unawaited(_setWindowFullscreen(true));
+            } else if (message.message == 'exitFullscreen') {
+              unawaited(_setWindowFullscreen(false));
             }
           },
         );
@@ -152,7 +221,7 @@ try {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: _isMobilePlatform
+      appBar: _isMobilePlatform || _isFullscreen
           ? null
           : AppBar(
               leading: IconButton(
